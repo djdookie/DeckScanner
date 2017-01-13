@@ -13,6 +13,9 @@
         <TextBox Name="tbResult" 
              ScrollViewer.HorizontalScrollBarVisibility="Auto"
              ScrollViewer.VerticalScrollBarVisibility="Auto"
-             ScrollViewer.CanContentScroll="True" Margin="0,20,0,0" Height="291"/>
+             ScrollViewer.CanContentScroll="True" Margin="0,20,0,0" Height="279"/>
+        <StatusBar>
+            <TextBlock x:Name="tbStatusbar">blabla</TextBlock>
+        </StatusBar>
     </StackPanel>
 </Window>

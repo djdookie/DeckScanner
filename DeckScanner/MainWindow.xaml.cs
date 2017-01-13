@@ -28,6 +28,8 @@ namespace DeckScanner
     public partial class MainWindow : Window
     {
         private string baseUrl = "http://metastats.net";
+        private static int _decksFound;
+        private static int _decksImported;
 
         public MainWindow()
         {
@@ -37,9 +39,9 @@ namespace DeckScanner
         private async void button_Click(object sender, RoutedEventArgs e)
         {
             button.IsEnabled = false;
-            //var slowTask = Task<int>.Factory.StartNew(WriteTest);
-            //await slowTask;
-            
+            _decksFound = 0;
+            _decksImported = 0;
+
             HtmlWeb hw = new HtmlWeb();
             HtmlDocument doc = new HtmlDocument();
             doc = hw.Load(textBox.Text);
@@ -62,6 +64,7 @@ namespace DeckScanner
                 //HtmlNode link = classSites[0];
                 // Get the value of the HREF attribute
                 string hrefValue = link.GetAttributeValue("href", string.Empty);
+                // Create tasks to parallel process all classites and speed up the deck collection
                 var task = Task.Run(() => GetClassDecks(baseUrl + hrefValue));
                 tasks.Add(task);
                 //await GetClassDecks(baseUrl + hrefValue, decks);
@@ -71,6 +74,8 @@ namespace DeckScanner
             {
                 decks.AddRange(t.Result);
             }
+
+            // TODO: Remove duplicates if any?
             
             Dispatcher.Invoke(DispatcherPriority.Normal, new Action(() => { 
                 tbResult.AppendText(String.Format("FINISHED! Created {0} decks.", decks.Count));
@@ -96,10 +101,14 @@ namespace DeckScanner
 
             var deckSites = doc.DocumentNode.SelectNodes("//div[@class='decklist']/div/h4/a/@href");
             //var deckUrls = new List<string>();
-            
+
+            // Count found decks thread-safe
+            Interlocked.Add(ref _decksFound, deckSites.Count);
+
             Dispatcher.Invoke(DispatcherPriority.Normal, new Action(() => {
                 tbResult.AppendText(String.Format("-Found {0} deckSites\r\n", deckSites.Count));
                 tbResult.ScrollToEnd();
+                updateStatusbar();
             }));
             //tbResult.Refresh();
             //Console.WriteLine(String.Format("-Found {0} deckSites", deckSites.Count));
@@ -116,6 +125,11 @@ namespace DeckScanner
             return decks;
         }
 
+        private void updateStatusbar()
+        {
+            tbStatusbar.Text = String.Format("Working... {0} of {1} decks imported!", _decksImported.ToString(), _decksFound.ToString());
+        }
+
         /// <summary>
         /// Gets a deck from the meta description of a website.
         /// </summary>
@@ -124,14 +138,18 @@ namespace DeckScanner
         private async Task<Deck> GetDeck(string url)
         {
             var result = await MetaTagImporter.TryFindDeck(url);
-            
+
+            // Count imported decks thread-safe
+            Interlocked.Increment(ref _decksImported);
+
             Dispatcher.Invoke(DispatcherPriority.Normal, new Action(() => {
                 tbResult.AppendText(String.Format("--Created {0}: {1} deck with {2} cards\r\n", result.Name, result.Class, result.Cards.Count));
                 tbResult.ScrollToEnd();
+                updateStatusbar();
             }));
             //tbResult.Refresh();
             //Console.WriteLine(String.Format("--Created {0}: {1} deck with {2} cards", result.Name, result.Class, result.Cards.Count));
-
+            
             return result;
         }
     }
