@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -18,6 +19,7 @@ using System.Windows.Shapes;
 using System.Windows.Threading;
 using Hearthstone_Deck_Tracker.Hearthstone;
 using Hearthstone_Deck_Tracker.Importing;
+using Hearthstone_Deck_Tracker.Stats;
 using HtmlAgilityPack;
 
 namespace DeckScanner
@@ -27,7 +29,7 @@ namespace DeckScanner
     /// </summary>
     public partial class MainWindow : Window
     {
-        private string baseUrl = "http://metastats.net";
+        private const string BaseUrl = "http://metastats.net";
         private static int _decksFound;
         private static int _decksImported;
 
@@ -65,7 +67,7 @@ namespace DeckScanner
                 // Get the value of the HREF attribute
                 string hrefValue = link.GetAttributeValue("href", string.Empty);
                 // Create tasks to parallel process all classites and speed up the deck collection
-                var task = Task.Run(() => GetClassDecks(baseUrl + hrefValue));
+                var task = Task.Run(() => GetClassDecks(BaseUrl + hrefValue));
                 tasks.Add(task);
                 //await GetClassDecks(baseUrl + hrefValue, decks);
             }
@@ -99,7 +101,8 @@ namespace DeckScanner
             HtmlDocument doc = new HtmlDocument();
             doc = hw.Load(url);
 
-            var deckSites = doc.DocumentNode.SelectNodes("//div[@class='decklist']/div/h4/a/@href");
+            //var deckSites = doc.DocumentNode.SelectNodes("//div[@class='decklist']/div/h4/a/@href");
+            var deckSites = doc.DocumentNode.SelectNodes("//div[@class='decklist']");
             //var deckUrls = new List<string>();
 
             // Count found decks thread-safe
@@ -115,10 +118,28 @@ namespace DeckScanner
 
             var decks = new List<Deck>();
 
-            foreach (HtmlNode link in deckSites)
+            foreach (HtmlNode site in deckSites)
             {
+                // Extract link
+                HtmlNode link = site.SelectSingleNode("./div/h4/a/@href");
                 string hrefValue = link.GetAttributeValue("href", string.Empty);
-                var result = await Task.Run(() => GetDeck(baseUrl + hrefValue));
+
+                // Extract info
+                HtmlNode stats = site.SelectSingleNode("./div/small");
+                string innerText = stats.InnerText;
+
+                // Create deck form site
+                var result = await Task.Run(() => GetDeck(BaseUrl + hrefValue));
+
+                // Add info to the deck
+                result.Note = innerText;
+                // Parse and add Guid to the deck
+                string strGuid = Regex.Match(hrefValue, @"[0-9a-f]{8}[-]?([0-9a-f]{4}[-]?){3}[0-9a-f]{12}").ToString();
+                result.DeckId = new Guid(strGuid);
+                // Set import datetime as LastEdited
+                result.LastEdited = DateTime.Now;
+
+                // Add deck to the decks list
                 decks.Add(result);
             }
 
@@ -137,7 +158,20 @@ namespace DeckScanner
         /// <returns></returns>
         private async Task<Deck> GetDeck(string url)
         {
+            // Create deck from metatags
             var result = await MetaTagImporter.TryFindDeck(url);
+
+            //// Parse and set guid
+            //string strGuid= Regex.Match(url, @"[0-9a-f]{8}[-]?([0-9a-f]{4}[-]?){3}[0-9a-f]{12}").ToString();
+            //result.DeckId = new Guid(strGuid);
+
+            //// Parse number of played games
+            //HtmlWeb hw = new HtmlWeb();
+            //HtmlDocument doc = new HtmlDocument();
+            //doc = hw.Load(url);
+            ////var playedGames = doc.DocumentNode.SelectNodes(@"//div[@id='deck-winrate']");
+            //var playedGames = doc.DocumentNode.SelectSingleNode(@"//div[@id='deck-winrate']");
+            ////string hrefValue = playedGames.GetAttributeValue("href", string.Empty);
 
             // Count imported decks thread-safe
             Interlocked.Increment(ref _decksImported);
